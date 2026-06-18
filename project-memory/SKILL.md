@@ -1,6 +1,6 @@
 ---
 name: project-memory
-description: Maintain durable project memory for Claude Code projects. Use when the user invokes /project-memory or asks to initialize project memory, restore context at session start, update memory from current work, summarize git diff into memory, or create a handoff for the next session.
+description: Maintain durable project memory for Claude Code projects. Use when the user invokes /project-memory or asks to initialize project memory, restore context at session start, update memory from current work, summarize git diff into memory, or create a handoff for the next session. Also use for Chinese requests such as 初始化项目记忆, 恢复项目上下文, 更新项目记忆, 更新记忆, 生成交接摘要, session 交接, or 收尾.
 ---
 
 # Project Memory
@@ -8,6 +8,8 @@ description: Maintain durable project memory for Claude Code projects. Use when 
 ## Purpose
 
 Use this skill to keep project context outside the chat transcript so new Claude Code sessions can resume quickly. Treat project memory as concise operational state, not a diary.
+
+Chinese trigger phrases map to the same actions: `初始化项目记忆` means `init`, `恢复项目上下文` means `start`, `更新项目记忆` means `update`, and `生成交接摘要` or `收尾` means `handoff`.
 
 Supported actions:
 

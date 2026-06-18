@@ -2,7 +2,51 @@
 
 A Claude Code skill for durable project memory across sessions.
 
+[中文说明](README.zh-CN.md)
+
 Claude conversations are temporary. Project memory should live with the project. This skill gives Claude Code a small, repeatable workflow for creating, restoring, updating, and handing off project context without pasting the same instructions into every new session.
+
+## Why This Exists
+
+Claude memory remembers the user. Claude Code `/init` describes the project. Project Memory tracks where the project is right now.
+
+This skill is useful when a project is active over many sessions and the important context is not just "what is this repository?" but "what did we just decide, what changed recently, what is still blocked, and what should the next session do first?"
+
+## How It Compares
+
+| Capability | Claude memory | Claude Code `/init` | Project Memory |
+| --- | --- | --- | --- |
+| Remembers long-term user preferences | Strong | Weak | Medium |
+| Creates initial project guidance | Weak | Strong | Medium |
+| Lives in the project repository | Not always | Usually | Yes |
+| Tracks current progress | Weak | Weak | Strong |
+| Records decisions and tradeoffs | Weak | Weak | Strong |
+| Creates next-session handoffs | Weak | Weak | Strong |
+| Works well with git history | Weak | Medium | Strong |
+| Can be shared with a team | Weak | Medium | Strong |
+
+Project Memory does not replace Claude memory or `/init`. It complements them:
+
+- Use Claude memory for durable personal preferences.
+- Use `/init` to bootstrap project-level instructions.
+- Use Project Memory to keep the project state current across sessions.
+
+## Best Use Cases
+
+- You frequently start new Claude Code sessions for the same project.
+- You come back to work after hours or days and want a fast context restore.
+- The project has decisions that Claude should not repeatedly revisit.
+- You switch models, compact context, or lose conversation history.
+- Multiple people or agents need to share project status through git.
+- You want a reliable end-of-session handoff ritual.
+
+## Advantages
+
+- **Project-local:** Memory files live in the repository, not only in a chat transcript.
+- **Git-friendly:** Progress, decisions, and handoffs can be reviewed and versioned.
+- **Operational:** It stores the current state and next action, not a long journal.
+- **Bilingual triggers:** It understands English commands and common Chinese requests.
+- **Low ceremony:** Remember `/project-memory start` when beginning and `/project-memory handoff` when leaving.
 
 ## Install
 
