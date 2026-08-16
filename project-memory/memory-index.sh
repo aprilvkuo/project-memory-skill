@@ -65,7 +65,7 @@ emit_row() {
 
 index_page() {
   local file="$1" rel="$2" last_task importance date_value summary policy
-  last_task="$(awk '/^[[:space:]]*last_task:[[:space:]]*[0-9]+/ { print $2; exit }' "$file")"
+  last_task="$(awk '/^[[:space:]]*last_task:[[:space:]]*/ { print $2; exit }' "$file")"
   importance="$(awk '/^[[:space:]]*importance:[[:space:]]*/ { print $2; exit }' "$file")"
   date_value="$(awk '/^[[:space:]]*date:[[:space:]]*/ { print $2; exit }' "$file")"
   policy="$(awk '/^[[:space:]]*load:[[:space:]]*/ { print $2; exit }' "$file")"
@@ -78,28 +78,49 @@ index_page() {
 }
 
 index_decisions() {
-  local file="$1" rel="$2" entries_file id last_task importance policy date_value summary anchor
+  local file="$1" rel="$2" entries_file id heading last_task importance policy date_value summary anchor
   entries_file="$(mktemp "${TMPDIR:-/tmp}/memory-decisions.XXXXXX")"
   awk '
     function flush() {
       if (id != "") {
+        gsub(/\|/, "", heading)
         gsub(/\|/, "", summary)
-        print id "|" last "|" importance "|" load "|" date_value "|" summary
+        print id "|" heading "|" last "|" importance "|" load "|" date_value "|" summary
       }
     }
-    /^## D[^[:space:]]*[[:space:]]/ { flush(); id=$2; last=""; importance=""; load=""; date_value=""; summary=""; next }
-    id != "" && /^last_task:[[:space:]]*/ { last=$2; next }
-    id != "" && /^importance:[[:space:]]*/ { importance=$2; next }
-    id != "" && /^load:[[:space:]]*/ { load=$2; next }
-    id != "" && /^date:[[:space:]]*/ { date_value=$2; next }
-    id != "" && /^summary:[[:space:]]*/ { sub(/^summary:[[:space:]]*/, ""); summary=$0; next }
-    END { flush() }
+    function metadata(key, value) {
+      if (seen[key]++) {
+        print "Error: duplicate " key " for " id > "/dev/stderr"
+        bad=1
+        return
+      }
+      if (key == "last_task") last=value
+      else if (key == "importance") importance=value
+      else if (key == "load") load=value
+      else if (key == "date") date_value=value
+      else if (key == "summary") summary=value
+    }
+    /^## D[^[:space:]]*[[:space:]]/ {
+      flush()
+      id=$2; heading=$0; sub(/^##[[:space:]]+/, "", heading)
+      last=""; importance=""; load=""; date_value=""; summary=""; meta=1
+      delete seen
+      next
+    }
+    id != "" && meta && /^(last_task|importance|load|date|summary):[[:space:]]*/ {
+      key=$0; sub(/:.*/, "", key)
+      value=$0; sub(/^[^:]+:[[:space:]]*/, "", value)
+      metadata(key, value)
+      next
+    }
+    id != "" && meta { meta=0 }
+    END { flush(); exit bad }
   ' "$file" > "$entries_file"
-  while IFS='|' read -r id last_task importance policy date_value summary; do
+  while IFS='|' read -r id heading last_task importance policy date_value summary; do
     [[ -n "$id" ]] || continue
     importance="${importance:-3}"
     policy="${policy:-recent}"
-    anchor="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+    anchor="$(printf '%s' "$heading" | sed 's/-/HYPHENTOKEN/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:punct:]]//g; s/hyphentoken/-/g; s/[[:space:]]/-/g; s/^-+//; s/-+$//')"
     emit_row "[$id]($rel#$anchor)" "$last_task" "$date_value" "$importance" "$policy" "$summary"
   done < "$entries_file"
   rm -f "$entries_file"

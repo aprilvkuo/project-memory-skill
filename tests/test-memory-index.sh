@@ -33,6 +33,7 @@ load: recent
 summary: Important history should remain available but cold.
 
 Old decision text.
+load: always
 
 ## D-always — Persistent operating constraint
 last_task: 0
@@ -49,6 +50,7 @@ load: on-demand
 summary: Load this only for a related question.
 
 Manual decision text.
+importance: 5
 
 ## D-default — Legacy entry metadata
 summary: Missing fields use conservative defaults.
@@ -80,14 +82,27 @@ EOF
 index="$mem_dir/MEMORY.md"
 
 grep -q '| Page | Tier | Load |' "$index" || fail "Load column missing"
-grep -q '\[D-old\](decisions.md#d-old).*| cold | recent:on-demand | 0 |.*| 5 | 0.03 |' "$index" || fail "stale importance-5 decision did not become cold/on-demand"
-grep -q '\[D-always\](decisions.md#d-always).*| cold | always | 0 |.*| 4 | 0.03 |' "$index" || fail "cold always decision is not automatic"
-grep -q '\[D-manual\](decisions.md#d-manual).*| hot | on-demand | 50 |.*| 3 | 1.00 |' "$index" || fail "hot on-demand decision became automatic"
-grep -q '\[D-default\](decisions.md#d-default).*| hot | recent:auto | — |.*| 3 | 1.00 |' "$index" || fail "missing decision metadata did not use defaults"
+grep -q '\[D-old\](decisions.md#d-old--preserve-without-injecting).*| cold | recent:on-demand | 0 |.*| 5 | 0.03 |' "$index" || fail "stale importance-5 decision or anchor is wrong"
+grep -q '\[D-always\](decisions.md#d-always--persistent-operating-constraint).*| cold | always | 0 |.*| 4 | 0.03 |' "$index" || fail "cold always decision or anchor is wrong"
+grep -q '\[D-manual\](decisions.md#d-manual--recent-but-explicitly-manual).*| hot | on-demand | 50 |.*| 3 | 1.00 |' "$index" || fail "body metadata leaked into the decision metadata block"
+grep -q '\[D-default\](decisions.md#d-default--legacy-entry-metadata).*| hot | recent:auto | — |.*| 3 | 1.00 |' "$index" || fail "missing decision metadata did not use defaults"
 grep -q '| current-state.md | hot | recent:auto | 50 |' "$index" || fail "legacy page compatibility failed"
 grep -q '| archive/task-log-archive.md |.*| on-demand |' "$index" || fail "archived task log is not forced on-demand"
 
 decision_rows="$(grep -c '](decisions.md#' "$index")"
 [[ "$decision_rows" == 4 ]] || fail "expected 4 decision rows, got $decision_rows"
+
+invalid_dir="$(mktemp -d)"
+cat > "$invalid_dir/current-state.md" <<'EOF'
+---
+last_task: typo
+importance: 3
+summary: Invalid legacy metadata
+---
+# Current State
+EOF
+if "$SCRIPT" "$invalid_dir" >/dev/null 2>&1; then
+  fail "invalid legacy last_task unexpectedly succeeded"
+fi
 
 echo "PASS: memory index"

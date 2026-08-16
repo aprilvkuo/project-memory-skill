@@ -85,7 +85,10 @@ Rules:
 - Newly archived entries are inserted into the archive in newest-first order, ahead of older archived entries.
 - File frontmatter and the level-one title are preserved.
 - `current_seq` continues to scan both active and archived task logs.
-- Rewrites use temporary files and atomic replacement so an interruption does not partially truncate either log.
+- Rewrites prepare both outputs first, replace the archive first, and merge by
+  unique sequence. An interruption can temporarily leave duplicate durable
+  copies but cannot lose the only copy; rerunning retention deduplicates and
+  converges before replacing the active log.
 
 The retention operation is implemented as a focused shell helper called by the skill workflow before rebuilding the index. It has no external runtime dependency beyond standard Unix tools already used by the project.
 

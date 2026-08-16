@@ -57,4 +57,16 @@ after="$(shasum "$invalid_dir/task-log.md")"
 [[ "$before" == "$after" ]] || fail "invalid limit modified task-log.md"
 [[ ! -e "$invalid_dir/archive/task-log-archive.md" ]] || fail "invalid limit created archive"
 
+recovery_dir="$(mktemp -d)"
+make_log "$recovery_dir"
+if MEMORY_RETENTION_FAIL_AFTER_ARCHIVE=1 "$SCRIPT" "$recovery_dir" >/dev/null 2>&1; then
+  fail "archive failpoint unexpectedly succeeded"
+fi
+grep -q '^## T1 ' "$recovery_dir/task-log.md" || fail "failpoint lost the active copy"
+grep -q '^## T1 ' "$recovery_dir/archive/task-log-archive.md" || fail "failpoint lost the archived copy"
+"$SCRIPT" "$recovery_dir" >/dev/null
+recovered_count="$(grep -h '^seq: ' "$recovery_dir/task-log.md" "$recovery_dir/archive/task-log-archive.md" | awk '{print $2}' | sort -n | uniq | wc -l | tr -d ' ')"
+total_count="$(grep -h -c '^seq: ' "$recovery_dir/task-log.md" "$recovery_dir/archive/task-log-archive.md" | awk -F: '{sum += $NF} END {print sum}')"
+[[ "$recovered_count" == 31 && "$total_count" == 31 ]] || fail "recovery did not converge to 31 unique entries"
+
 echo "PASS: task-log retention"

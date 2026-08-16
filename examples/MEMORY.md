@@ -12,8 +12,8 @@ Current task seq: 50
 |------|------|------|-----------|------|------------|---------|-------|---------|
 | current-state.md | hot | recent:auto | 50 | 2026-08-16 | 5 | 1.00 | 5.00 | Current operational state, focus, and next step |
 | session-handoff.md | hot | recent:auto | 50 | 2026-08-16 | 4 | 1.00 | 4.00 | Concise next-session handoff |
-| [D1](decisions.md#d1) | hot | recent:auto | 48 | 2026-08-14 | 4 | 0.87 | 3.48 | Memory recency follows task distance rather than calendar age. |
+| [D1](decisions.md#d1--memory-decays-by-task-sequence-not-calendar-time) | hot | recent:auto | 48 | 2026-08-14 | 4 | 0.87 | 3.48 | Memory recency follows task distance rather than calendar age. |
 | task-log.md | hot | recent:auto | 50 | 2026-08-16 | 3 | 1.00 | 3.00 | Recent task progress (newest first) |
-| [D-old](archive/decisions-archive.md#d-old) | cold | on-demand | 12 | 2026-03-10 | 5 | 0.07 | 0.35 | Project memory remains Git-tracked and human-readable. |
-| [D2](decisions.md#d2) | cold | recent:on-demand | 12 | 2026-03-10 | 5 | 0.07 | 0.35 | Critical decisions are preserved but stop auto-loading when stale. |
+| [D-old](archive/decisions-archive.md#d-old--single-source-of-truth-for-memory-lives-in-the-repo) | cold | on-demand | 12 | 2026-03-10 | 5 | 0.07 | 0.35 | Project memory remains Git-tracked and human-readable. |
+| [D2](decisions.md#d2--separate-preservation-importance-from-automatic-loading) | cold | recent:on-demand | 12 | 2026-03-10 | 5 | 0.07 | 0.35 | Critical decisions are preserved but stop auto-loading when stale. |
 | archive/task-log-archive.md | cold | on-demand | 8 | 2026-02-02 | 1 | 0.05 | 0.05 | Historical task log (low importance, far back in the task sequence) |

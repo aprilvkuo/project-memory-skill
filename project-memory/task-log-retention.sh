@@ -32,7 +32,9 @@ active_tmp="$(mktemp "$MEM_DIR/.task-log.active.XXXXXX")"
 moved_tmp="$(mktemp "$MEM_DIR/.task-log.moved.XXXXXX")"
 archive_tmp="$(mktemp "$ARCHIVE_DIR/.task-log-archive.XXXXXX")"
 archive_body_tmp="$(mktemp "$ARCHIVE_DIR/.task-log-body.XXXXXX")"
-trap 'rm -f "$active_tmp" "$moved_tmp" "$archive_tmp" "$archive_body_tmp"' EXIT
+moved_seqs_tmp="$(mktemp "$ARCHIVE_DIR/.task-log-seqs.XXXXXX")"
+filtered_body_tmp="$(mktemp "$ARCHIVE_DIR/.task-log-filtered.XXXXXX")"
+trap 'rm -f "$active_tmp" "$moved_tmp" "$archive_tmp" "$archive_body_tmp" "$moved_seqs_tmp" "$filtered_body_tmp"' EXIT
 
 awk -v limit="$LIMIT" -v active="$active_tmp" -v moved="$moved_tmp" '
   /^## T[0-9]+([[:space:]]|$)/ { count++; destination=(count <= limit ? active : moved) }
@@ -61,10 +63,29 @@ fi
 
 cat "$moved_tmp" >> "$archive_tmp"
 if [[ -s "$archive_body_tmp" ]]; then
-  cat "$archive_body_tmp" >> "$archive_tmp"
+  awk '/^seq:[[:space:]]*[0-9]+/ { print $2 }' "$moved_tmp" > "$moved_seqs_tmp"
+  awk '
+    NR == FNR { moved[$1]=1; next }
+    function flush() {
+      if (block != "" && !(seq in moved)) printf "%s", block
+    }
+    /^## T[0-9]+([[:space:]]|$)/ { flush(); block=$0 ORS; seq=""; next }
+    block != "" {
+      block=block $0 ORS
+      if ($0 ~ /^seq:[[:space:]]*[0-9]+/) seq=$2
+    }
+    END { flush() }
+  ' "$moved_seqs_tmp" "$archive_body_tmp" > "$filtered_body_tmp"
+  cat "$filtered_body_tmp" >> "$archive_tmp"
 fi
 
-mv "$active_tmp" "$ACTIVE"
+# Archive first: interruption may leave duplicates, but never loses the only
+# durable copy. A rerun removes duplicates by sequence and converges.
 mv "$archive_tmp" "$ARCHIVE"
+if [[ "${MEMORY_RETENTION_FAIL_AFTER_ARCHIVE:-0}" == 1 ]]; then
+  echo "Error: retention interrupted after archive replacement (test failpoint)" >&2
+  exit 75
+fi
+mv "$active_tmp" "$ACTIVE"
 
 echo "Retained $LIMIT active task entries; archived $((entry_count - LIMIT)) older entries"
