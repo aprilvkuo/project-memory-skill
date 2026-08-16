@@ -11,10 +11,12 @@
 长期项目的记忆文件（`current-state` / `decisions` / `task-log` / handoff）会一直
 膨胀，直到撑爆上下文窗口。本技能解决这个问题：
 
-- **先读索引。** 每个会话开头只读取 `MEMORY.md` 这张小表格；hot + warm 页展开，cold 页折叠。
+- **先读索引。** 每个会话开头只读取 `MEMORY.md`；只展开标记为 `always` 或
+  `recent:auto` 的条目，其余按需读取。
 - **按任务序列衰减，不是按天数。** 一个半年没动、但之后只过了 3 个任务的决定，依然高度相关。
   衰减的单位是"这条记忆距上次被触及中间过了多少个任务"，不是"过了多少天"。
-- **重要性保底。** 关键架构决策（importance 5）的 recency 永保 0.50，不会被归档洗掉。
+- **重要性与加载解耦。** importance 决定保留与排序，`load` 决定是否自动进入上下文。
+- **活跃历史有硬边界。** `task-log.md` 只保留最新 30 条，更早记录迁入按需归档。
 
 ## 安装
 
@@ -32,23 +34,37 @@ cd claude-project-memory
 | 命令 | 作用 |
 |------|------|
 | `/project-memory init`   | 创建 `docs/project-memory/` 骨架 + 空 `MEMORY.md`。 |
-| `/project-memory start`  | 新会话：读 `MEMORY.md`，展开 hot+warm，cold 按需。 |
-| `/project-memory update` | 有进展后：追加任务流水、刷新 frontmatter、重建索引。 |
+| `/project-memory start`  | 新会话：读 `MEMORY.md`，展开 `always` 与 `recent:auto`。 |
+| `/project-memory update` | 有进展后：追加任务、保留 30 条活跃记录、重建索引。 |
 | `/project-memory handoff`| 收尾：更新记忆 + 写 <300 字交接，重建索引。 |
 
 ## 衰减怎么算
 
 ```yaml
 tasks_since = current_seq - entry.last_task      # current_seq = task-log*.md 里最大的 seq
-recency     = max( floor[importance], 0.5 ^ (tasks_since / HALF_LIFE) )
+recency     = 0.5 ^ (tasks_since / HALF_LIFE)
 ```
 
 - `HALF_LIFE` 默认 **10 个任务**（在 `MEMORY.md` 顶部设 `Half-life (tasks):`，或用
   `MEMORY_HALF_LIFE=14` 临时覆盖）。
-- `floor[importance] = {5:0.50, 4:0.25, 3:0.10, 2:0.05, 1:0.00}`。
 - 档位：**hot** recency ≥ 0.67，**warm** 0.20–0.67，**cold** < 0.20。
 
-`memory-index.sh` 会在每次 `update` / `handoff` 时自动重算索引。
+每条决策拥有独立元数据：
+
+```markdown
+## D12 — 项目记忆保存在仓库中
+last_task: 48
+importance: 5
+load: recent
+summary: 项目记忆保持人类可读并由 Git 跟踪。
+```
+
+`load` 可取 `always`、`recent`（默认）或 `on-demand`。陈旧的 importance-5
+决策仍会保留并获得较高排序，但会正常变冷；除非设置 `always`，否则不再永久自动加载。
+
+`task-log-retention.sh` 默认保留 30 条活跃记录，可用
+`MEMORY_TASK_LOG_LIMIT=50` 覆盖。当前序号仍同时扫描活跃与归档日志；
+`update` / `handoff` 会先归档再重建索引。
 
 ## 文件结构
 
@@ -56,8 +72,8 @@ recency     = max( floor[importance], 0.5 ^ (tasks_since / HALF_LIFE) )
 docs/project-memory/
 ├── MEMORY.md                  # 自动生成的索引——先读它
 ├── current-state.md           # hot：状态 / 焦点 / 阻塞 / 下一步
-├── decisions.md               # warm：决策与权衡（含 importance、last_task）
-├── task-log.md                # hot：任务流水，每条带单调递增 seq
+├── decisions.md               # 按条目独立索引的决策与权衡
+├── task-log.md                # 最新 30 条任务，每条带单调递增 seq
 ├── session-handoff.md         # hot：下次会话交接
 └── archive/                   # cold：冷却后的旧记忆
     ├── decisions-archive.md
@@ -66,8 +82,8 @@ docs/project-memory/
 
 ## 示例
 
-见 [`examples/`](examples/)——含由示例文件生成的 `MEMORY.md`，演示一条 importance-5
-决策在隔了 38 个任务后仍保底 recency 0.50，而一条 importance-1 任务衰减到 0.05。
+见 [`examples/`](examples/) 中的条目元数据和生成索引。运行 `bash tests/run.sh`
+执行无依赖回归测试，其中包括 500-task 生命周期测试和 30/470 活跃/归档边界检查。
 
 ## 许可证
 
