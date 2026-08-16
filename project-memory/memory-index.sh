@@ -1,106 +1,134 @@
 #!/usr/bin/env bash
-#
-# memory-index.sh — rebuild MEMORY.md for the project-memory skill.
-#
-# DECAY AXIS = TASK SEQUENCE (NOT calendar time).
-#   current_seq = max(seq) across all task-log*.md
-#   tasks_since = current_seq - entry.last_task
-#   recency     = max( floor[importance], 0.5^(tasks_since / HALF_LIFE) )
-#   floor[imp]  = {5:0.50, 4:0.25, 3:0.10, 2:0.05, 1:0.00}
-#
-# Rationale: a decision untouched for 6 months but preceded by only 3 tasks is
-# still highly relevant; a trivial task from 40 tasks ago should be forgotten.
-# The importance floor keeps critical decisions (imp5) alive forever.
-#
+# Rebuild MEMORY.md using task-sequence recency and an independent load policy.
 set -euo pipefail
 
 MEM_DIR="${1:-.}"
 INDEX="$MEM_DIR/MEMORY.md"
 
-# --- half-life config (task-count based); round-trips through MEMORY.md ---
 HALF_LIFE="${MEMORY_HALF_LIFE:-}"
 if [[ -z "$HALF_LIFE" && -f "$INDEX" ]]; then
   HALF_LIFE="$(grep -iE 'Half-life' "$INDEX" | grep -oE '[0-9]+' | head -1 || true)"
 fi
 HALF_LIFE="${HALF_LIFE:-10}"
-
 if ! [[ "$HALF_LIFE" =~ ^[0-9]+$ ]] || (( HALF_LIFE < 1 )); then
   echo "Error: HALF_LIFE must be a positive integer (got '$HALF_LIFE')" >&2
   exit 1
 fi
 
-REBUILD_DATE="$(date +%Y-%m-%d)"
-
-floor() {
-  case "$1" in
-    5) echo 0.50;; 4) echo 0.25;; 3) echo 0.10;; 2) echo 0.05;; *) echo 0.00;;
-  esac
-}
-
-# --- current task sequence = max seq across task-log*.md ---
 current_seq=0
-while IFS= read -r f; do
-  s="$(awk '/^[[:space:]]*seq:[[:space:]]*[0-9]+/ { v=$2+0; if (v>max) max=v } END{ print max+0 }' "$f" 2>/dev/null || echo 0)"
-  if (( s > current_seq )); then current_seq=$s; fi
-done < <(find "$MEM_DIR" -maxdepth 2 -type f -name 'task-log*.md' 2>/dev/null | sort)
+while IFS= read -r file; do
+  seq_max="$(awk '/^[[:space:]]*seq:[[:space:]]*[0-9]+/ { value=$2+0; if (value>max) max=value } END { print max+0 }' "$file")"
+  (( seq_max > current_seq )) && current_seq="$seq_max"
+done < <(find "$MEM_DIR" -maxdepth 2 -type f -name 'task-log*.md' | sort)
 
-rows=""
-while IFS= read -r f; do
-  rel="${f#$MEM_DIR/}"
-  [[ "$rel" == "MEMORY.md" ]] && continue
+rows_file="$(mktemp "${TMPDIR:-/tmp}/memory-index-rows.XXXXXX")"
+trap 'rm -f "$rows_file"' EXIT
 
-  last_task="$(awk '/^[[:space:]]*last_task:[[:space:]]*[0-9]+/ {print $2; exit}' "$f" 2>/dev/null || true)"
-  importance="$(awk '/^[[:space:]]*importance:[[:space:]]*[0-9]+/ {print $2; exit}' "$f" 2>/dev/null || true)"
-  datef="$(awk '/^[[:space:]]*date:[[:space:]]+[0-9-]+/ {print $2; exit}' "$f" 2>/dev/null || true)"
-  summary="$(awk '/^[[:space:]]*summary:[[:space:]]+/ { sub(/^[[:space:]]*summary:[[:space:]]*/,"",$0); print; exit }' "$f" 2>/dev/null || true)"
-  [[ -z "$summary" ]] && summary="$(awk '/^#/ { sub(/^#+/,"",$0); gsub(/^[ \t]+/,"",$0); print; exit }' "$f" 2>/dev/null || true)"
-
-  importance="${importance:-3}"
-  # clamp importance to [1,5]
-  (( importance < 1 )) && importance=1
-  (( importance > 5 )) && importance=5
-
+emit_row() {
+  local page="$1" last_task="$2" date_value="$3" importance="$4" policy="$5" summary="$6"
+  local tasks_since recency tier effective_load score
+  if [[ -n "$last_task" ]] && ! [[ "$last_task" =~ ^[0-9]+$ ]]; then
+    echo "Error: invalid last_task '$last_task' for $page" >&2
+    exit 1
+  fi
+  if ! [[ "$importance" =~ ^[1-5]$ ]]; then
+    echo "Error: importance must be 1-5 (got '$importance' for $page)" >&2
+    exit 1
+  fi
+  case "$policy" in
+    always|recent|on-demand) ;;
+    *) echo "Error: load must be always, recent, or on-demand (got '$policy' for $page)" >&2; exit 1 ;;
+  esac
   if [[ -z "$last_task" ]]; then
-    tasks_since=0            # legacy / no signal -> treat as current (safe)
+    tasks_since=0
   else
-    tasks_since=$(( current_seq - last_task ))
+    tasks_since=$((current_seq - last_task))
     (( tasks_since < 0 )) && tasks_since=0
   fi
+  recency="$(awk -v ts="$tasks_since" -v hl="$HALF_LIFE" 'BEGIN { printf "%.2f", 0.5^(ts/hl) }')"
+  if awk -v value="$recency" 'BEGIN { exit !(value>=0.67) }'; then
+    tier=hot
+  elif awk -v value="$recency" 'BEGIN { exit !(value>=0.20) }'; then
+    tier=warm
+  else
+    tier=cold
+  fi
+  case "$policy" in
+    always) effective_load=always ;;
+    on-demand) effective_load=on-demand ;;
+    recent) if [[ "$tier" == cold ]]; then effective_load=recent:on-demand; else effective_load=recent:auto; fi ;;
+  esac
+  score="$(awk -v recency="$recency" -v imp="$importance" 'BEGIN { printf "%.2f", recency*imp }')"
+  summary="${summary//|/}"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$page" "$tier" "$effective_load" "$last_task" "$date_value" "$importance" "$recency" "$score" "$summary" >> "$rows_file"
+}
 
-  fl="$(floor "$importance")"
-  raw="$(awk -v ts="$tasks_since" -v hl="$HALF_LIFE" 'BEGIN{ printf "%.4f", 0.5^(ts/hl) }')"
-  rec="$(awk -v r="$raw" -v fl="$fl" 'BEGIN{ printf "%.2f", (r>fl)?r:fl }')"
+index_page() {
+  local file="$1" rel="$2" last_task importance date_value summary policy
+  last_task="$(awk '/^[[:space:]]*last_task:[[:space:]]*[0-9]+/ { print $2; exit }' "$file")"
+  importance="$(awk '/^[[:space:]]*importance:[[:space:]]*/ { print $2; exit }' "$file")"
+  date_value="$(awk '/^[[:space:]]*date:[[:space:]]*/ { print $2; exit }' "$file")"
+  policy="$(awk '/^[[:space:]]*load:[[:space:]]*/ { print $2; exit }' "$file")"
+  summary="$(awk '/^[[:space:]]*summary:[[:space:]]+/ { sub(/^[[:space:]]*summary:[[:space:]]*/, ""); print; exit }' "$file")"
+  [[ -n "$summary" ]] || summary="$(awk '/^#/ { sub(/^#+[[:space:]]*/, ""); print; exit }' "$file")"
+  importance="${importance:-3}"
+  policy="${policy:-recent}"
+  [[ "$rel" == archive/task-log*.md ]] && policy=on-demand
+  emit_row "$rel" "$last_task" "$date_value" "$importance" "$policy" "$summary"
+}
 
-  if awk -v r="$rec" 'BEGIN{ exit !(r>=0.67) }'; then tier=hot
-  elif awk -v r="$rec" 'BEGIN{ exit !(r>=0.20) }'; then tier=warm
-  else tier=cold; fi
+index_decisions() {
+  local file="$1" rel="$2" entries_file id last_task importance policy date_value summary anchor
+  entries_file="$(mktemp "${TMPDIR:-/tmp}/memory-decisions.XXXXXX")"
+  awk '
+    function flush() { if (id != "") print id "\t" last "\t" importance "\t" load "\t" date_value "\t" summary }
+    /^## D[^[:space:]]*[[:space:]]/ { flush(); id=$2; last=""; importance=""; load=""; date_value=""; summary=""; next }
+    id != "" && /^last_task:[[:space:]]*/ { last=$2; next }
+    id != "" && /^importance:[[:space:]]*/ { importance=$2; next }
+    id != "" && /^load:[[:space:]]*/ { load=$2; next }
+    id != "" && /^date:[[:space:]]*/ { date_value=$2; next }
+    id != "" && /^summary:[[:space:]]*/ { sub(/^summary:[[:space:]]*/, ""); summary=$0; next }
+    END { flush() }
+  ' "$file" > "$entries_file"
+  while IFS=$'\t' read -r id last_task importance policy date_value summary; do
+    [[ -n "$id" ]] || continue
+    importance="${importance:-3}"
+    policy="${policy:-recent}"
+    anchor="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
+    emit_row "[$id]($rel#$anchor)" "$last_task" "$date_value" "$importance" "$policy" "$summary"
+  done < "$entries_file"
+  rm -f "$entries_file"
+}
 
-  score="$(awk -v r="$rec" -v i="$importance" 'BEGIN{ printf "%.2f", r*i }')"
-  # escape pipe characters in summary to avoid breaking the markdown table
-  summary="${summary//|//}"
-  rows+="$rel|$tier|$last_task|$datef|$importance|$rec|$score|$summary"$'\n'
-done < <(find "$MEM_DIR" -maxdepth 2 -type f -name '*.md' ! -name 'MEMORY.md' 2>/dev/null | sort)
+while IFS= read -r file; do
+  rel="${file#$MEM_DIR/}"
+  [[ "$rel" == MEMORY.md ]] && continue
+  if grep -q '^## D[^[:space:]]*[[:space:]]' "$file"; then
+    index_decisions "$file" "$rel"
+  else
+    index_page "$file" "$rel"
+  fi
+done < <(find "$MEM_DIR" -maxdepth 2 -type f -name '*.md' ! -name MEMORY.md | sort)
 
-sorted="$(printf '%s' "$rows" | grep -v '^$' | sort -t'|' -k7 -nr || true)"
-
+sorted="$(sort -t'|' -k8,8nr "$rows_file")"
+rebuild_date="$(date +%Y-%m-%d)"
 {
   echo "# Memory Index"
   echo
-  echo "Last rebuilt: $REBUILD_DATE"
+  echo "Last rebuilt: $rebuild_date"
   echo "Half-life (tasks): $HALF_LIFE"
   echo "Current task seq: $current_seq"
   echo
   echo "> Auto-generated by memory-index.sh — do not edit by hand."
-  echo "> Recency is TASK-SEQUENCE based (not calendar time): memories touched by recent tasks weigh more."
-  echo "> Importance floor keeps critical decisions alive (imp5 >= 0.50, never archived out)."
-  echo "> Load hot + warm tiers by default; expand cold tiers only when relevant."
+  echo "> Recency uses task distance only; importance affects preservation and ranking, not recency."
+  echo "> Load rows marked \`always\` or \`recent:auto\`; expand all other rows only when relevant."
   echo
-  echo "| Page | Tier | Last Task | Date | Importance | Recency | Score | Summary |"
-  echo "|------|------|-----------|------|-----------|---------|-------|---------|"
+  echo "| Page | Tier | Load | Last Task | Date | Importance | Recency | Score | Summary |"
+  echo "|------|------|------|-----------|------|------------|---------|-------|---------|"
   if [[ -n "$sorted" ]]; then
-    printf '%s\n' "$sorted" | while IFS='|' read -r page tier lt dt imp rec score sum; do
-      echo "| $page | $tier | ${lt:-—} | ${dt:-—} | $imp | $rec | $score | $sum |"
-    done
+    while IFS='|' read -r page tier load last_task date_value importance recency score summary; do
+      echo "| $page | $tier | $load | ${last_task:-—} | ${date_value:-—} | $importance | $recency | $score | $summary |"
+    done <<< "$sorted"
   fi
 } > "$INDEX"
 
