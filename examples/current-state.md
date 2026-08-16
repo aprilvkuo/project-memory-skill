@@ -1,38 +1,12 @@
+---
+last_task: 50
+importance: 5
+date: 2026-08-16
+summary: Current operational state, focus, and next step
+---
+
 # Current State
 
-## Last Updated
-
-2026-06-18
-
-## Project Goal
-
-Provide a reusable Claude Code skill that keeps project context durable across sessions.
-
-## Current Focus
-
-Publish the first GitHub-ready version of the skill.
-
-## What Exists Now
-
-- A `project-memory` Claude Code skill.
-- Install and uninstall scripts.
-- Example memory file templates.
-
-## Recent Changes
-
-- Created the repository structure.
-- Added the skill instructions and metadata.
-- Added install and uninstall scripts.
-
-## Open Issues
-
-- Replace placeholder GitHub URL in `README.md` after creating the repository.
-
-## Next Steps
-
-1. Push the repository to GitHub.
-2. Test installation from a clean clone.
-
-## Notes For Future Sessions
-
-- Keep the skill small and operational.
+- **Focus:** Ship v2 of project-memory with task-sequence decay.
+- **Blockers:** none.
+- **Next:** verify v2 decay with a real task-log, then tag v2.0.0 and update docs.

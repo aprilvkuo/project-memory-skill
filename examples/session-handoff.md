@@ -1,27 +1,11 @@
+---
+last_task: 50
+importance: 4
+date: 2026-08-16
+summary: Concise next-session handoff
+---
+
 # Session Handoff
 
-## Start Here
-
-1. Read `README.md`.
-2. Read `project-memory/SKILL.md`.
-
-## Current Focus
-
-The repository is ready for an initial GitHub push.
-
-## Last Completed
-
-- Created the first public project structure for the `project-memory` Claude Code skill.
-
-## Next Action
-
-Create the GitHub repository and update the clone URL in `README.md`.
-
-## Watch Outs
-
-- Do not expand into hooks until the basic skill workflow has real user feedback.
-
-## Useful Files
-
-- `project-memory/SKILL.md`: Core behavior for the Claude Code skill.
-- `install.sh`: Installs the skill into `~/.claude/skills/project-memory`.
+Next: verify v2 decay against a real task-log, then tag v2.0.0 and refresh docs.
+Open blockers: none.

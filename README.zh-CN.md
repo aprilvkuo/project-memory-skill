@@ -1,58 +1,20 @@
-# Claude Project Memory
+# claude-project-memory（中文说明）
 
-一个用于 Claude Code 的项目记忆 skill，让项目上下文在不同 session 之间持续保存。
+一个 [Claude Code](https://docs.claude.com/en/docs/claude-code) 技能，为你的项目提供
+**跨会话的持久记忆**：**按需加载**，并带**任务序列衰减**（类 LSTM 遗忘门），让陈旧、琐碎的
+上下文自动冷却，而不是每次会话都撑爆 context。
 
-Claude 的聊天记录是临时的，但项目记忆应该保存在项目里。这个工具会让 Claude Code 用一套固定流程创建、读取、更新和交接项目上下文，避免每次新开 session 都重新解释项目。
+它与 Claude memory、`/init` 互补：记忆存在仓库里，跟踪当前进度与决策，并在会话间交接。
 
-## 为什么需要它
+## 为什么要"按需加载 + 衰减"？
 
-Claude memory 记住“你是谁”。Claude Code 的 `/init` 描述“项目是什么”。Project Memory 记录“项目现在进行到哪”。
+长期项目的记忆文件（`current-state` / `decisions` / `task-log` / handoff）会一直
+膨胀，直到撑爆上下文窗口。本技能解决这个问题：
 
-当项目跨很多 session 持续推进时，真正容易丢的不是项目简介，而是这些上下文：
-
-- 最近做了什么
-- 当前重点是什么
-- 哪些决策已经定了
-- 哪些问题还没解决
-- 下一个 session 应该先做什么
-
-Project Memory 就是为这些“项目交接信息”准备的。
-
-## 和 Claude memory、`/init` 的区别
-
-| 能力 | Claude memory | Claude Code `/init` | Project Memory |
-| --- | --- | --- | --- |
-| 记住长期个人偏好 | 强 | 弱 | 中 |
-| 生成初始项目说明 | 弱 | 强 | 中 |
-| 跟随项目仓库 | 不一定 | 通常是 | 是 |
-| 记录当前进度 | 弱 | 弱 | 强 |
-| 记录决策和取舍 | 弱 | 弱 | 强 |
-| 生成下一 session 交接 | 弱 | 弱 | 强 |
-| 配合 git 历史 | 弱 | 中 | 强 |
-| 团队共享 | 弱 | 中 | 强 |
-
-它不是替代 Claude memory 或 `/init`，而是补上它们不擅长的部分：
-
-- Claude memory 适合保存你的长期偏好。
-- `/init` 适合第一次扫描项目并生成项目说明。
-- Project Memory 适合持续维护项目状态和 session 交接。
-
-## 适合的使用场景
-
-- 你经常为同一个项目新开 Claude Code session。
-- 你隔几个小时或几天回来继续工作，希望快速恢复上下文。
-- 项目里有一些已经决定过的技术/产品取舍，不希望 AI 反复推翻。
-- 你经常切换模型、压缩上下文，或丢失旧聊天记录。
-- 多个人或多个 AI agent 需要通过 git 共享项目状态。
-- 你希望每次收尾时都有一个稳定的交接流程。
-
-## 优势
-
-- **项目本地化：** 记忆文件保存在项目仓库里，而不是只留在聊天记录里。
-- **适合版本控制：** 进度、决策和交接摘要都可以被 git 跟踪。
-- **偏向执行：** 记录当前状态和下一步，而不是冗长流水账。
-- **支持中文触发：** 可以用“初始化项目记忆”“更新记忆”“生成交接摘要”“收尾”等中文表达。
-- **低负担：** 开始时记住 `/project-memory start`，离开前记住 `/project-memory handoff` 就够了。
+- **先读索引。** 每个会话开头只读取 `MEMORY.md` 这张小表格；hot + warm 页展开，cold 页折叠。
+- **按任务序列衰减，不是按天数。** 一个半年没动、但之后只过了 3 个任务的决定，依然高度相关。
+  衰减的单位是"这条记忆距上次被触及中间过了多少个任务"，不是"过了多少天"。
+- **重要性保底。** 关键架构决策（importance 5）的 recency 永保 0.50，不会被归档洗掉。
 
 ## 安装
 
@@ -62,118 +24,51 @@ cd claude-project-memory
 ./install.sh
 ```
 
-安装脚本会把 skill 复制到：
-
-```text
-~/.claude/skills/project-memory
-```
-
-如果本机已经安装过旧版本，脚本会先创建一个带时间戳的备份，再安装新版本。
+安装到 `~/.claude/skills/project-memory`（如已存在会先备份）。用 `./uninstall.sh`
+卸载（只删技能本身，不动仓库里的记忆文件）。
 
 ## 使用
 
-在 Claude Code 中运行：
+| 命令 | 作用 |
+|------|------|
+| `/project-memory init`   | 创建 `docs/project-memory/` 骨架 + 空 `MEMORY.md`。 |
+| `/project-memory start`  | 新会话：读 `MEMORY.md`，展开 hot+warm，cold 按需。 |
+| `/project-memory update` | 有进展后：追加任务流水、刷新 frontmatter、重建索引。 |
+| `/project-memory handoff`| 收尾：更新记忆 + 写 <300 字交接，重建索引。 |
 
-```text
-/project-memory init
+## 衰减怎么算
+
+```yaml
+tasks_since = current_seq - entry.last_task      # current_seq = task-log*.md 里最大的 seq
+recency     = max( floor[importance], 0.5 ^ (tasks_since / HALF_LIFE) )
 ```
 
-这会在当前项目里初始化记忆文件：
+- `HALF_LIFE` 默认 **10 个任务**（在 `MEMORY.md` 顶部设 `Half-life (tasks):`，或用
+  `MEMORY_HALF_LIFE=14` 临时覆盖）。
+- `floor[importance] = {5:0.50, 4:0.25, 3:0.10, 2:0.05, 1:0.00}`。
+- 档位：**hot** recency ≥ 0.67，**warm** 0.20–0.67，**cold** < 0.20。
 
-```text
-CLAUDE.md
-docs/project-memory/current-state.md
-docs/project-memory/decisions.md
-docs/project-memory/task-log.md
-docs/project-memory/session-handoff.md
+`memory-index.sh` 会在每次 `update` / `handoff` 时自动重算索引。
+
+## 文件结构
+
+```
+docs/project-memory/
+├── MEMORY.md                  # 自动生成的索引——先读它
+├── current-state.md           # hot：状态 / 焦点 / 阻塞 / 下一步
+├── decisions.md               # warm：决策与权衡（含 importance、last_task）
+├── task-log.md                # hot：任务流水，每条带单调递增 seq
+├── session-handoff.md         # hot：下次会话交接
+└── archive/                   # cold：冷却后的旧记忆
+    ├── decisions-archive.md
+    └── task-log-archive.md
 ```
 
-新 session 开始时运行：
+## 示例
 
-```text
-/project-memory start
-```
+见 [`examples/`](examples/)——含由示例文件生成的 `MEMORY.md`，演示一条 importance-5
+决策在隔了 38 个任务后仍保底 recency 0.50，而一条 importance-1 任务衰减到 0.05。
 
-它会读取项目记忆，恢复当前状态、重点任务、遗留问题和建议下一步。
-
-完成一段有意义的工作后运行：
-
-```text
-/project-memory update
-```
-
-它会根据当前对话、git diff、最近提交和文件状态更新长期记忆。
-
-准备结束 session、切换模型或压缩上下文前运行：
-
-```text
-/project-memory handoff
-```
-
-`handoff` 会顺带执行必要的 `update`，然后生成给下一个 session 的简短交接摘要。所以如果你只想记一个收尾命令，记住 `handoff` 就够了。
-
-## 命令区别
-
-| 命令 | 用途 |
-| --- | --- |
-| `/project-memory init` | 初始化项目记忆文件结构。 |
-| `/project-memory start` | 读取已有记忆，恢复项目上下文。 |
-| `/project-memory update` | 根据当前工作更新长期项目记忆。 |
-| `/project-memory handoff` | 更新记忆，并生成下一 session 的交接摘要。 |
-
-## 会记录什么
-
-Project Memory 只记录稳定、有用的项目状态：
-
-- 当前项目目标
-- 当前工作重点
-- 最近有意义的变更
-- 重要决策和取舍
-- 未解决问题
-- 下一 session 的最佳下一步
-
-它不应该记录私有推理过程、完整聊天记录或噪声历史。
-
-## 推荐工作流
-
-第一次进入项目：
-
-```text
-/project-memory init
-```
-
-每次新 session 开始：
-
-```text
-/project-memory start
-```
-
-每次准备离开：
-
-```text
-/project-memory handoff
-```
-
-如果中途做了比较大的修改，也可以手动运行：
-
-```text
-/project-memory update
-```
-
-## 卸载
-
-```bash
-./uninstall.sh
-```
-
-这只会删除：
-
-```text
-~/.claude/skills/project-memory
-```
-
-不会删除任何项目里的记忆文件。
-
-## License
+## 许可证
 
 MIT

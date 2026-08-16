@@ -1,52 +1,25 @@
-# Claude Project Memory
+# claude-project-memory
 
-A Claude Code skill for durable project memory across sessions.
+A [Claude Code](https://docs.claude.com/en/docs/claude-code) skill that gives your
+project **persistent, cross-session memory** — loaded **on demand**, with a
+**task-sequence decay** (LSTM-style forget gate) so old, trivial context fades
+out instead of bloating every session.
 
-[中文说明](README.zh-CN.md)
+It complements Claude memory and `/init`: it lives in your repo, tracks current
+progress and decisions, and hands off to the next session.
 
-Claude conversations are temporary. Project memory should live with the project. This skill gives Claude Code a small, repeatable workflow for creating, restoring, updating, and handing off project context without pasting the same instructions into every new session.
+## Why on-demand + decay?
 
-## Why This Exists
+A long-lived project's memory files (`current-state`, `decisions`, `task-log`,
+handoff) grow until they blow the context window. This skill fixes that:
 
-Claude memory remembers the user. Claude Code `/init` describes the project. Project Memory tracks where the project is right now.
-
-This skill is useful when a project is active over many sessions and the important context is not just "what is this repository?" but "what did we just decide, what changed recently, what is still blocked, and what should the next session do first?"
-
-## How It Compares
-
-| Capability | Claude memory | Claude Code `/init` | Project Memory |
-| --- | --- | --- | --- |
-| Remembers long-term user preferences | Strong | Weak | Medium |
-| Creates initial project guidance | Weak | Strong | Medium |
-| Lives in the project repository | Not always | Usually | Yes |
-| Tracks current progress | Weak | Weak | Strong |
-| Records decisions and tradeoffs | Weak | Weak | Strong |
-| Creates next-session handoffs | Weak | Weak | Strong |
-| Works well with git history | Weak | Medium | Strong |
-| Can be shared with a team | Weak | Medium | Strong |
-
-Project Memory does not replace Claude memory or `/init`. It complements them:
-
-- Use Claude memory for durable personal preferences.
-- Use `/init` to bootstrap project-level instructions.
-- Use Project Memory to keep the project state current across sessions.
-
-## Best Use Cases
-
-- You frequently start new Claude Code sessions for the same project.
-- You come back to work after hours or days and want a fast context restore.
-- The project has decisions that Claude should not repeatedly revisit.
-- You switch models, compact context, or lose conversation history.
-- Multiple people or agents need to share project status through git.
-- You want a reliable end-of-session handoff ritual.
-
-## Advantages
-
-- **Project-local:** Memory files live in the repository, not only in a chat transcript.
-- **Git-friendly:** Progress, decisions, and handoffs can be reviewed and versioned.
-- **Operational:** It stores the current state and next action, not a long journal.
-- **Bilingual triggers:** It understands English commands and common Chinese requests.
-- **Low ceremony:** Remember `/project-memory start` when beginning and `/project-memory handoff` when leaving.
+- **Index first.** Each session starts by reading only `MEMORY.md` — a small
+  table. Hot + warm pages are expanded; cold pages stay collapsed.
+- **Decay by task sequence, not calendar time.** A decision untouched for 6
+  months but preceded by only 3 tasks is still highly relevant. The decay unit
+  is *"how many tasks since this was last touched"*, not *"how many days"*.
+- **Importance floor.** Critical architecture decisions (importance 5) keep a
+  recency floor of 0.50 forever and are never archived out.
 
 ## Install
 
@@ -56,87 +29,52 @@ cd claude-project-memory
 ./install.sh
 ```
 
-The installer copies the skill to:
-
-```text
-~/.claude/skills/project-memory
-```
-
-If an older copy exists, the installer creates a timestamped backup before replacing it.
+Installs to `~/.claude/skills/project-memory` (backs up any existing version
+first). Uninstall with `./uninstall.sh` (removes only the skill, never your
+in-repo memory).
 
 ## Usage
 
-In Claude Code, run:
+| Command | What it does |
+|---------|--------------|
+| `/project-memory init`   | Create the `docs/project-memory/` skeleton + empty `MEMORY.md`. |
+| `/project-memory start`  | New session: read `MEMORY.md`, expand hot+warm, hand off cold. |
+| `/project-memory update` | After progress: append task-log entry, refresh frontmatter, rebuild index. |
+| `/project-memory handoff`| End of session: update memory + write <300-word handoff, rebuild index. |
 
-```text
-/project-memory init
+## How decay works
+
+```yaml
+tasks_since = current_seq - entry.last_task      # current_seq = max(seq) in task-log*.md
+recency     = max( floor[importance], 0.5 ^ (tasks_since / HALF_LIFE) )
 ```
 
-This initializes project-local memory files:
+- `HALF_LIFE` defaults to **10 tasks** (set `Half-life (tasks):` in `MEMORY.md`,
+  or `MEMORY_HALF_LIFE=14` to override).
+- `floor[importance] = {5:0.50, 4:0.25, 3:0.10, 2:0.05, 1:0.00}`.
+- Tiers: **hot** recency ≥ 0.67, **warm** 0.20–0.67, **cold** < 0.20.
 
-```text
-CLAUDE.md
-docs/project-memory/current-state.md
-docs/project-memory/decisions.md
-docs/project-memory/task-log.md
-docs/project-memory/session-handoff.md
+`memory-index.sh` recomputes the index automatically on every `update`/`handoff`.
+
+## File layout
+
+```
+docs/project-memory/
+├── MEMORY.md                  # auto-generated index — read this first
+├── current-state.md           # hot: state / focus / blockers / next
+├── decisions.md               # warm: decisions + tradeoffs (importance, last_task)
+├── task-log.md                # hot: task stream, each entry has a monotonic seq
+├── session-handoff.md         # hot: next-session handoff
+└── archive/                   # cold: cooled-down old memory
+    ├── decisions-archive.md
+    └── task-log-archive.md
 ```
 
-At the beginning of a new session:
+## Example
 
-```text
-/project-memory start
-```
-
-After meaningful work:
-
-```text
-/project-memory update
-```
-
-Before closing a session, switching models, or compacting context:
-
-```text
-/project-memory handoff
-```
-
-`handoff` also performs the useful parts of `update`, so it is the easiest command to remember at the end of a session.
-
-## Commands
-
-| Command | Purpose |
-| --- | --- |
-| `/project-memory init` | Create the project memory file structure. |
-| `/project-memory start` | Read existing memory and summarize the current state. |
-| `/project-memory update` | Update durable memory from the conversation, git diff, recent commits, and current file state. |
-| `/project-memory handoff` | Update memory and write a concise next-session handoff. |
-
-## What Gets Stored
-
-Project memory is intentionally small and operational:
-
-- current project state
-- active focus
-- recent meaningful changes
-- important decisions and tradeoffs
-- open issues
-- next action for the next session
-
-It should not store private chain-of-thought, long chat transcripts, or noisy history.
-
-## Uninstall
-
-```bash
-./uninstall.sh
-```
-
-This removes:
-
-```text
-~/.claude/skills/project-memory
-```
-
-It does not remove memory files from your projects.
+See [`examples/`](examples/) — including `MEMORY.md` generated from the sample
+files, demonstrating an importance-5 decision kept alive at recency 0.50 after
+38 tasks, while an importance-1 task fades to 0.05.
 
 ## License
 
