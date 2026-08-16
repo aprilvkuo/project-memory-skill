@@ -81,7 +81,12 @@ index_decisions() {
   local file="$1" rel="$2" entries_file id last_task importance policy date_value summary anchor
   entries_file="$(mktemp "${TMPDIR:-/tmp}/memory-decisions.XXXXXX")"
   awk '
-    function flush() { if (id != "") print id "\t" last "\t" importance "\t" load "\t" date_value "\t" summary }
+    function flush() {
+      if (id != "") {
+        gsub(/\|/, "", summary)
+        print id "|" last "|" importance "|" load "|" date_value "|" summary
+      }
+    }
     /^## D[^[:space:]]*[[:space:]]/ { flush(); id=$2; last=""; importance=""; load=""; date_value=""; summary=""; next }
     id != "" && /^last_task:[[:space:]]*/ { last=$2; next }
     id != "" && /^importance:[[:space:]]*/ { importance=$2; next }
@@ -90,7 +95,7 @@ index_decisions() {
     id != "" && /^summary:[[:space:]]*/ { sub(/^summary:[[:space:]]*/, ""); summary=$0; next }
     END { flush() }
   ' "$file" > "$entries_file"
-  while IFS=$'\t' read -r id last_task importance policy date_value summary; do
+  while IFS='|' read -r id last_task importance policy date_value summary; do
     [[ -n "$id" ]] || continue
     importance="${importance:-3}"
     policy="${policy:-recent}"
