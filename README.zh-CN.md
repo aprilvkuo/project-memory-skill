@@ -44,6 +44,27 @@ Hermes 也可以直接从 GitHub 安装：
 hermes skills install aprilvkuo/claude-project-memory/project-memory
 ```
 
+## 更新与验证
+
+拉取仓库后重新运行安装器；被替换的版本会保留为带时间戳的备份：
+
+```bash
+git pull --ff-only
+./install.sh
+```
+
+验证三个安装目录与仓库源码完全一致：
+
+```bash
+diff -qr project-memory "$HOME/.claude/skills/project-memory"
+diff -qr project-memory "$HOME/.agents/skills/project-memory"
+diff -qr project-memory "$HOME/.hermes/skills/project-memory"
+hermes skills list | grep project-memory   # 已安装 Hermes 时
+```
+
+Codex 会自动检测 skill 变更；若未显示，重启 Codex。Hermes 在新 session 中加载更新，
+已有 session 可用 `/reset` 刷新。
+
 ## 调用方式
 
 | Agent | 示例 |

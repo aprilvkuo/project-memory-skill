@@ -52,6 +52,29 @@ Hermes users can alternatively install directly from GitHub:
 hermes skills install aprilvkuo/claude-project-memory/project-memory
 ```
 
+## Update and verify
+
+Pull the repository and rerun the installer. Each replaced version is retained
+as a timestamped backup:
+
+```bash
+git pull --ff-only
+./install.sh
+```
+
+Verify that all installed bundles match the repository source:
+
+```bash
+diff -qr project-memory "$HOME/.claude/skills/project-memory"
+diff -qr project-memory "$HOME/.agents/skills/project-memory"
+diff -qr project-memory "$HOME/.hermes/skills/project-memory"
+hermes skills list | grep project-memory   # when Hermes is installed
+```
+
+Codex detects skill changes automatically; restart Codex if the updated skill
+does not appear. Hermes updates installed by this repository immediately on a
+new session; use `/reset` when refreshing an existing session.
+
 ## Invocation
 
 | Agent | Example |

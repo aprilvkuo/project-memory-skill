@@ -19,14 +19,16 @@ description: 为 Claude Code、Codex 和 Hermes 维护跨会话项目记忆。�
 | Codex | `$project-memory init`、`$project-memory start`、`$project-memory update`、`$project-memory handoff` |
 | Hermes | `/project-memory init`、`/project-memory start`、`/project-memory update`、`/project-memory handoff` |
 
-执行脚本前，从当前运行时披露或加载的 `SKILL.md` 绝对路径取得其父目录，记为 `SKILL_DIR`。只运行：
+执行脚本前，从当前运行时披露或加载的路径复制当前 `SKILL.md` 的绝对路径，替换下面的占位值。必须在**同一次 shell 调用**中完成赋值和执行：
 
 ```bash
+SKILL_FILE="/absolute/path/reported-by-the-runtime/project-memory/SKILL.md"
+SKILL_DIR="$(cd "$(dirname "$SKILL_FILE")" && pwd)"
 "$SKILL_DIR/task-log-retention.sh" docs/project-memory
 "$SKILL_DIR/memory-index.sh" docs/project-memory
 ```
 
-不要假设当前项目包含 `./project-memory/`，也不要从当前工作目录猜测 skill 的安装位置。
+不要原样使用占位路径。不要假设当前项目包含 `./project-memory/`，也不要从当前工作目录猜测 skill 的安装位置。每次新的独立 shell 调用都要重新设置 `SKILL_FILE` 和 `SKILL_DIR`。
 
 ---
 
@@ -124,8 +126,8 @@ Verified: 跑过 memory-index.sh，recency 计算正确。
 1. 读 git diff / commit / 当前文件，判断改了什么。
 2. 在 `task-log.md` 顶部插入新条目，`seq = current_seq + 1`。
 3. 更新相关页或决策条目的 `last_task = 新 seq`；新决策必须填写 `importance`、`load` 与 `summary`。
-4. 运行 `"$SKILL_DIR/task-log-retention.sh" docs/project-memory`，只保留最新 30 条活跃任务，旧条目迁入归档。
-5. 运行 `"$SKILL_DIR/memory-index.sh" docs/project-memory` 重建 `MEMORY.md`。
+4. 按“调用与脚本定位”的单次 shell 模板运行 `task-log-retention.sh`，只保留最新 30 条活跃任务，旧条目迁入归档。
+5. 在同一次 shell 调用中运行 `memory-index.sh` 重建 `MEMORY.md`。
 6. 高 importance 决策允许变冷但不得自动删除；低重要性旧信息可迁入 archive，并保持按需加载。
 7. 没跑验证命令就写 `Verified: not run`，不许假装成功。
 

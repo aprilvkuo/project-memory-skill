@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d)"
+[[ -n "$TEST_ROOT" && -d "$TEST_ROOT" ]] || exit 1
+ROLLBACK_ROOT=""
+trap 'rm -rf -- "$TEST_ROOT"; [[ -n "$ROLLBACK_ROOT" ]] && rm -rf -- "$ROLLBACK_ROOT"' EXIT
 CLAUDE_ROOT="$TEST_ROOT/claude"
 CODEX_ROOT="$TEST_ROOT/codex"
 HERMES_ROOT="$TEST_ROOT/hermes"
@@ -15,6 +18,27 @@ fail() {
 for skill_root in "$CLAUDE_ROOT" "$CODEX_ROOT" "$HERMES_ROOT"; do
   mkdir -p "$skill_root/project-memory"
   printf 'previous install\n' > "$skill_root/project-memory/old.txt"
+done
+
+ROLLBACK_ROOT="$(mktemp -d)"
+ROLLBACK_CLAUDE="$ROLLBACK_ROOT/claude"
+ROLLBACK_CODEX="$ROLLBACK_ROOT/codex"
+ROLLBACK_HERMES="$ROLLBACK_ROOT/hermes"
+for skill_root in "$ROLLBACK_CLAUDE" "$ROLLBACK_CODEX" "$ROLLBACK_HERMES"; do
+  mkdir -p "$skill_root/project-memory"
+  printf 'must survive rollback\n' > "$skill_root/project-memory/old.txt"
+done
+if PROJECT_MEMORY_INSTALL_FAIL_AT=codex \
+  CLAUDE_SKILLS_DIR="$ROLLBACK_CLAUDE" \
+  CODEX_SKILLS_DIR="$ROLLBACK_CODEX" \
+  HERMES_SKILLS_DIR="$ROLLBACK_HERMES" \
+  "$ROOT/install.sh" >/dev/null 2>&1; then
+  fail "injected Codex installation failure unexpectedly succeeded"
+fi
+for skill_root in "$ROLLBACK_CLAUDE" "$ROLLBACK_CODEX" "$ROLLBACK_HERMES"; do
+  [[ "$(cat "$skill_root/project-memory/old.txt")" == "must survive rollback" ]] || fail "rollback did not restore $skill_root"
+  [[ "$(find "$skill_root" -maxdepth 1 -name '.project-memory.install.*' | wc -l | tr -d ' ')" == 0 ]] || fail "staging directory leaked at $skill_root"
+  [[ "$(find "$skill_root" -maxdepth 1 -name 'project-memory.backup.*' | wc -l | tr -d ' ')" == 0 ]] || fail "rollback backup leaked at $skill_root"
 done
 
 CLAUDE_SKILLS_DIR="$CLAUDE_ROOT" \
