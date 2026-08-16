@@ -1,12 +1,13 @@
-# claude-project-memory
+# project-memory
 
-A [Claude Code](https://docs.claude.com/en/docs/claude-code) skill that gives your
-project **persistent, cross-session memory** — loaded **on demand**, with a
-**task-sequence decay** (LSTM-style forget gate) so old, trivial context fades
-out instead of bloating every session.
+A portable Agent Skill for [Claude Code](https://docs.claude.com/en/docs/claude-code),
+[Codex](https://developers.openai.com/codex/skills), and
+[Hermes Agent](https://github.com/NousResearch/hermes-agent). It gives a project
+**persistent, cross-session memory** with on-demand loading, task-sequence decay,
+and a bounded active task log.
 
-It complements Claude memory and `/init`: it lives in your repo, tracks current
-progress and decisions, and hands off to the next session.
+The same Git-tracked memory is shared across all three agents, so work can hand
+off between runtimes without copying state or introducing a database.
 
 ## Why on-demand + decay?
 
@@ -32,18 +33,41 @@ cd claude-project-memory
 ./install.sh
 ```
 
-Installs to `~/.claude/skills/project-memory` (backs up any existing version
-first). Uninstall with `./uninstall.sh` (removes only the skill, never your
-in-repo memory).
+The installer deploys the same bundle to all three official user locations:
 
-## Usage
+| Agent | Install location |
+|-------|------------------|
+| Claude Code | `~/.claude/skills/project-memory` |
+| Codex | `~/.agents/skills/project-memory` |
+| Hermes | `~/.hermes/skills/project-memory` |
 
-| Command | What it does |
-|---------|--------------|
-| `/project-memory init`   | Create the `docs/project-memory/` skeleton + empty `MEMORY.md`. |
-| `/project-memory start`  | New session: read `MEMORY.md`, expand `always` + `recent:auto` rows. |
-| `/project-memory update` | After progress: append a task, retain 30 active entries, rebuild the index. |
-| `/project-memory handoff`| End of session: update memory + write <300-word handoff, rebuild index. |
+Existing installs are backed up first. Override roots with
+`CLAUDE_SKILLS_DIR`, `CODEX_SKILLS_DIR`, or `HERMES_SKILLS_DIR`. Run
+`./uninstall.sh` to remove active installs only; project memory and backups are
+left untouched.
+
+Hermes users can alternatively install directly from GitHub:
+
+```bash
+hermes skills install aprilvkuo/claude-project-memory/project-memory
+```
+
+## Invocation
+
+| Agent | Example |
+|-------|---------|
+| Claude Code | `/project-memory start` |
+| Codex | `$project-memory start` |
+| Hermes | `/project-memory start` |
+
+## Actions
+
+| Action | What it does |
+|--------|--------------|
+| `init`   | Create the `docs/project-memory/` skeleton + empty `MEMORY.md`. |
+| `start`  | New session: read `MEMORY.md`, expand `always` + `recent:auto` rows. |
+| `update` | After progress: append a task, retain 30 active entries, rebuild the index. |
+| `handoff`| End of session: update memory + write <300-word handoff, rebuild the index. |
 
 ## How decay works
 

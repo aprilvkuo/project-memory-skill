@@ -1,13 +1,32 @@
 ---
 name: project-memory
-description: 跨会话的 Claude Code 项目记忆。触发词：初始化项目记忆 / init、恢复项目上下文 / start、更新项目记忆 / 更新记忆 / update、生成交接摘要 / 收尾 / handoff。提供按需加载、按任务序列衰减（类 LSTM 遗忘门）的多档记忆，避免每次会话都全量读入、爆掉 context。
+description: 为 Claude Code、Codex 和 Hermes 维护跨会话项目记忆。触发词：project-memory、初始化项目记忆 / init、恢复项目上下文 / start、更新项目记忆 / 更新记忆 / update、生成交接摘要 / 收尾 / handoff。使用按需加载、条目级任务序列衰减和有界任务日志，避免长期项目撑爆 context。
 ---
 
 # Project Memory
 
-跨会话的、存在仓库里的项目记忆。目标是：**新会话开头只加载最相关的少量记忆，旧而琐碎的记忆自动冷却、按需才展开**——而不是把 current-state / decisions / task-log / handoff 全部塞进 context。
+供 Claude Code、Codex 和 Nous Research Hermes Agent 共用的仓库内项目记忆。目标是：**新会话开头只加载最相关的少量记忆，旧而琐碎的记忆自动冷却、按需才展开**——而不是把 current-state / decisions / task-log / handoff 全部塞进 context。
 
 灵感来自 LLM Wiki（先读索引、再按需展开页面）与分层记忆（Hot/Warm/Cold）。衰减轴是 **任务序列**，不是日历时间。
+
+---
+
+## 0. 调用与脚本定位
+
+| Agent | 调用方式 |
+|------|----------|
+| Claude Code | `/project-memory init`、`/project-memory start`、`/project-memory update`、`/project-memory handoff` |
+| Codex | `$project-memory init`、`$project-memory start`、`$project-memory update`、`$project-memory handoff` |
+| Hermes | `/project-memory init`、`/project-memory start`、`/project-memory update`、`/project-memory handoff` |
+
+执行脚本前，从当前运行时披露或加载的 `SKILL.md` 绝对路径取得其父目录，记为 `SKILL_DIR`。只运行：
+
+```bash
+"$SKILL_DIR/task-log-retention.sh" docs/project-memory
+"$SKILL_DIR/memory-index.sh" docs/project-memory
+```
+
+不要假设当前项目包含 `./project-memory/`，也不要从当前工作目录猜测 skill 的安装位置。
 
 ---
 
@@ -44,7 +63,7 @@ recency     = 0.5 ^ (tasks_since / HALF_LIFE)
 ## 2. 文件布局
 
 ```
-CLAUDE.md                              # 软指引（可选，指向 docs/project-memory）
+CLAUDE.md / AGENTS.md                  # 可选软指引，指向 docs/project-memory
 docs/project-memory/
 ├── MEMORY.md                          # 索引（自动生成，先读它）
 ├── current-state.md                   # 当前状态/焦点/阻塞/下一步
@@ -92,25 +111,25 @@ Verified: 跑过 memory-index.sh，recency 计算正确。
 
 ## 3. 命令
 
-### `/project-memory init`
+### `project-memory init`
 在仓库里创建 `docs/project-memory/` 骨架 + `MEMORY.md` 空索引。若已存在则跳过。
 
-### `/project-memory start`（新会话开头）
+### `project-memory start`（新会话开头）
 1. **只读 `MEMORY.md` 索引**（几行表格，极省 token）。
 2. 加载 `Load` 列为 **`always`** 或 **`recent:auto`** 的页/条目。
 3. `recent:on-demand` 与 `on-demand` 不默认读取；仅当用户问题明显相关时按索引展开。
 4. 汇总当前状态，给出下一步。
 
-### `/project-memory update`（有实质进展后）
+### `project-memory update`（有实质进展后）
 1. 读 git diff / commit / 当前文件，判断改了什么。
 2. 在 `task-log.md` 顶部插入新条目，`seq = current_seq + 1`。
 3. 更新相关页或决策条目的 `last_task = 新 seq`；新决策必须填写 `importance`、`load` 与 `summary`。
-4. 运行 `task-log-retention.sh docs/project-memory`，只保留最新 30 条活跃任务，旧条目迁入归档。
-5. 运行 `memory-index.sh docs/project-memory` 重建 `MEMORY.md`。
+4. 运行 `"$SKILL_DIR/task-log-retention.sh" docs/project-memory`，只保留最新 30 条活跃任务，旧条目迁入归档。
+5. 运行 `"$SKILL_DIR/memory-index.sh" docs/project-memory` 重建 `MEMORY.md`。
 6. 高 importance 决策允许变冷但不得自动删除；低重要性旧信息可迁入 archive，并保持按需加载。
 7. 没跑验证命令就写 `Verified: not run`，不许假装成功。
 
-### `/project-memory handoff`（收尾）
+### `project-memory handoff`（收尾）
 1. 执行一次 `update`。
 2. 把 `session-handoff.md` 写成 < 300 字的下次会话交接（当前焦点、已完成、下一步、阻塞）。
 3. 执行 task-log 保留并重建 `MEMORY.md`（含 `Current task seq`）。
@@ -127,5 +146,5 @@ Verified: 跑过 memory-index.sh，recency 计算正确。
 
 ## 5. 配置
 - `Half-life (tasks):` 写在 `MEMORY.md` 顶部（默认 10）。改大=记忆更持久，改小=衰减更激进。
-- 临时覆盖：`MEMORY_HALF_LIFE=14 ./project-memory/memory-index.sh docs/project-memory`。
-- 活跃任务默认上限 30；临时覆盖：`MEMORY_TASK_LOG_LIMIT=50 ./project-memory/task-log-retention.sh docs/project-memory`。
+- 临时覆盖：`MEMORY_HALF_LIFE=14 "$SKILL_DIR/memory-index.sh" docs/project-memory`。
+- 活跃任务默认上限 30；临时覆盖：`MEMORY_TASK_LOG_LIMIT=50 "$SKILL_DIR/task-log-retention.sh" docs/project-memory`。

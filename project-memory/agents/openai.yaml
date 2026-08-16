@@ -1,4 +1,4 @@
 interface:
   display_name: "Project Memory"
-  short_description: "Maintain durable project memory files for Claude Code sessions."
-  default_prompt: "Use project-memory to initialize, restore, update, or hand off this project memory."
+  short_description: "Maintain durable, bounded project memory across coding agents."
+  default_prompt: "Use $project-memory to restore or update this project's durable memory."

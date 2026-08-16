@@ -1,10 +1,11 @@
-# claude-project-memory（中文说明）
+# project-memory（中文说明）
 
-一个 [Claude Code](https://docs.claude.com/en/docs/claude-code) 技能，为你的项目提供
-**跨会话的持久记忆**：**按需加载**，并带**任务序列衰减**（类 LSTM 遗忘门），让陈旧、琐碎的
-上下文自动冷却，而不是每次会话都撑爆 context。
+一个同时支持 [Claude Code](https://docs.claude.com/en/docs/claude-code)、
+[Codex](https://developers.openai.com/codex/skills) 和
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) 的可移植 Agent Skill。
+它为项目提供按需加载、任务序列衰减和有界任务日志的**跨会话持久记忆**。
 
-它与 Claude memory、`/init` 互补：记忆存在仓库里，跟踪当前进度与决策，并在会话间交接。
+三种 Agent 共用仓库内的同一份记忆，因此可以跨运行时交接，不需要复制状态或引入数据库。
 
 ## 为什么要"按需加载 + 衰减"？
 
@@ -26,17 +27,39 @@ cd claude-project-memory
 ./install.sh
 ```
 
-安装到 `~/.claude/skills/project-memory`（如已存在会先备份）。用 `./uninstall.sh`
-卸载（只删技能本身，不动仓库里的记忆文件）。
+安装器会把同一个 bundle 部署到三个官方用户目录：
 
-## 使用
+| Agent | 安装位置 |
+|-------|----------|
+| Claude Code | `~/.claude/skills/project-memory` |
+| Codex | `~/.agents/skills/project-memory` |
+| Hermes | `~/.hermes/skills/project-memory` |
 
-| 命令 | 作用 |
+已有版本会先备份。可用 `CLAUDE_SKILLS_DIR`、`CODEX_SKILLS_DIR`、
+`HERMES_SKILLS_DIR` 覆盖根目录。`./uninstall.sh` 只移除当前安装，不删除项目记忆或备份。
+
+Hermes 也可以直接从 GitHub 安装：
+
+```bash
+hermes skills install aprilvkuo/claude-project-memory/project-memory
+```
+
+## 调用方式
+
+| Agent | 示例 |
+|-------|------|
+| Claude Code | `/project-memory start` |
+| Codex | `$project-memory start` |
+| Hermes | `/project-memory start` |
+
+## 操作
+
+| 操作 | 作用 |
 |------|------|
-| `/project-memory init`   | 创建 `docs/project-memory/` 骨架 + 空 `MEMORY.md`。 |
-| `/project-memory start`  | 新会话：读 `MEMORY.md`，展开 `always` 与 `recent:auto`。 |
-| `/project-memory update` | 有进展后：追加任务、保留 30 条活跃记录、重建索引。 |
-| `/project-memory handoff`| 收尾：更新记忆 + 写 <300 字交接，重建索引。 |
+| `init`   | 创建 `docs/project-memory/` 骨架 + 空 `MEMORY.md`。 |
+| `start`  | 新会话：读 `MEMORY.md`，展开 `always` 与 `recent:auto`。 |
+| `update` | 有进展后：追加任务、保留 30 条活跃记录、重建索引。 |
+| `handoff`| 收尾：更新记忆 + 写 <300 字交接，重建索引。 |
 
 ## 衰减怎么算
 
