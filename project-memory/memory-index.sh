@@ -120,7 +120,7 @@ index_decisions() {
     [[ -n "$id" ]] || continue
     importance="${importance:-3}"
     policy="${policy:-recent}"
-    anchor="$(printf '%s' "$heading" | sed 's/-/HYPHENTOKEN/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:punct:]]//g; s/hyphentoken/-/g; s/[[:space:]]/-/g; s/^-+//; s/-+$//')"
+    anchor="$(printf '%s' "$heading" | sed 's/-/HYPHENTOKEN/g; s/_/UNDERSCORETOKEN/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:punct:]]//g; s/hyphentoken/-/g; s/underscoretoken/_/g; s/[[:space:]]/-/g; s/^-+//; s/-+$//')"
     emit_row "[$id]($rel#$anchor)" "$last_task" "$date_value" "$importance" "$policy" "$summary"
   done < "$entries_file"
   rm -f "$entries_file"

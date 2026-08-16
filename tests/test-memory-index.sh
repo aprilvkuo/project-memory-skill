@@ -56,6 +56,12 @@ importance: 5
 summary: Missing fields use conservative defaults.
 
 Legacy decision text.
+
+## D_api — API choice 中文
+last_task: 50
+importance: 2
+load: recent
+summary: Anchors preserve underscores and Unicode text.
 EOF
 
 cat > "$mem_dir/current-state.md" <<'EOF'
@@ -86,11 +92,12 @@ grep -q '\[D-old\](decisions.md#d-old--preserve-without-injecting).*| cold | rec
 grep -q '\[D-always\](decisions.md#d-always--persistent-operating-constraint).*| cold | always | 0 |.*| 4 | 0.03 |' "$index" || fail "cold always decision or anchor is wrong"
 grep -q '\[D-manual\](decisions.md#d-manual--recent-but-explicitly-manual).*| hot | on-demand | 50 |.*| 3 | 1.00 |' "$index" || fail "body metadata leaked into the decision metadata block"
 grep -q '\[D-default\](decisions.md#d-default--legacy-entry-metadata).*| hot | recent:auto | — |.*| 3 | 1.00 |' "$index" || fail "missing decision metadata did not use defaults"
+grep -q '\[D_api\](decisions.md#d_api--api-choice-中文).*| hot | recent:auto | 50 |' "$index" || fail "underscore/Unicode anchor is not renderer-compatible"
 grep -q '| current-state.md | hot | recent:auto | 50 |' "$index" || fail "legacy page compatibility failed"
 grep -q '| archive/task-log-archive.md |.*| on-demand |' "$index" || fail "archived task log is not forced on-demand"
 
 decision_rows="$(grep -c '](decisions.md#' "$index")"
-[[ "$decision_rows" == 4 ]] || fail "expected 4 decision rows, got $decision_rows"
+[[ "$decision_rows" == 5 ]] || fail "expected 5 decision rows, got $decision_rows"
 
 invalid_dir="$(mktemp -d)"
 cat > "$invalid_dir/current-state.md" <<'EOF'
