@@ -19,19 +19,25 @@ rollback_needed=1
 
 cleanup() {
   status=$?
+  trap - EXIT
+  set +e
+  cleanup_error=0
   if (( rollback_needed )); then
     for ((index=${#targets[@]}-1; index>=0; index--)); do
       if [[ "${installed[$index]:-0}" == 1 && -e "${targets[$index]}" ]]; then
-        rm -rf -- "${targets[$index]}"
+        rm -rf -- "${targets[$index]}" || cleanup_error=1
       fi
       if [[ "${backed_up[$index]:-0}" == 1 && -e "${backups[$index]}" ]]; then
-        mv "${backups[$index]}" "${targets[$index]}"
+        mv "${backups[$index]}" "${targets[$index]}" || cleanup_error=1
       fi
     done
   fi
   for stage in "${stages[@]:-}"; do
-    [[ -n "$stage" && -e "$stage" ]] && rm -rf -- "$stage"
+    if [[ -n "$stage" && -e "$stage" ]]; then
+      rm -rf -- "$stage" || cleanup_error=1
+    fi
   done
+  (( status == 0 && cleanup_error != 0 )) && status=1
   exit "$status"
 }
 trap cleanup EXIT

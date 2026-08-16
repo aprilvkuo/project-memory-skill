@@ -53,6 +53,7 @@ EOF
   cd "$PORTABLE_ROOT/work"
   SKILL_FILE="$PORTABLE_ROOT/installed/project-memory/SKILL.md"
   SKILL_DIR="$(cd "$(dirname "$SKILL_FILE")" && pwd)"
+  "$SKILL_DIR/task-log-retention.sh" docs/project-memory >/dev/null
   "$SKILL_DIR/memory-index.sh" docs/project-memory >/dev/null
 )
 grep -q '^Current task seq: 1$' "$PORTABLE_ROOT/work/docs/project-memory/MEMORY.md" || fail "installed helper did not execute from an unrelated project"
