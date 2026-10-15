@@ -31,6 +31,8 @@ handoff) grow until they blow the context window. This skill fixes that:
 git clone https://github.com/aprilvkuo/claude-project-memory.git
 cd claude-project-memory
 ./install.sh
+# Install only one agent:
+./install.sh --target codex   # claude | codex | hermes | all
 ```
 
 The installer deploys the same bundle to all three official user locations:
@@ -41,10 +43,14 @@ The installer deploys the same bundle to all three official user locations:
 | Codex | `~/.agents/skills/project-memory` |
 | Hermes | `~/.hermes/skills/project-memory` |
 
-Existing installs are backed up first. Override roots with
+Existing installs are backed up outside the discovery roots, under
+`<parent-of-skill-root>/skill-backups/project-memory/<agent>/<timestamp>/`.
+For example, Codex backups live in `~/.agents/skill-backups/project-memory/codex/`.
+Updates also move legacy `project-memory.backup.*` skill folders into that backup
+directory, preserving their contents. Override roots with
 `CLAUDE_SKILLS_DIR`, `CODEX_SKILLS_DIR`, or `HERMES_SKILLS_DIR`. Run
 `./uninstall.sh` to remove active installs only; project memory and backups are
-left untouched.
+left untouched. `./uninstall.sh --target codex` removes only the selected agent.
 
 Hermes users can alternatively install directly from GitHub:
 
@@ -121,6 +127,24 @@ stops auto-loading unless its policy is `always`.
 `MEMORY_TASK_LOG_LIMIT=50`; the current sequence still scans active and archived
 logs. The skill runs retention before rebuilding the index on update/handoff.
 
+Retention validates both logs before replacing either one: every heading `Tn`
+must match a unique `seq: n`, entries must be newest-first, and overlapping
+active/archive sequences must have identical content. Invalid input leaves both
+logs unchanged. After an interrupted archive-first update, rerunning converges
+without dropping records.
+
+Metadata is parsed only inside top-of-file frontmatter or the contiguous field
+block immediately below a decision heading. Fenced examples are ignored. Inline
+comments and single/double-quoted scalar values are supported; this is a small
+metadata format, not a general YAML parser. Missing decision fields inherit the
+page's fields before defaults are applied.
+
+The generated index reports row count and default-loaded content size in UTF-8
+bytes. `MEMORY_CONTEXT_BUDGET_BYTES` defaults to 32768; exceeding it prints a
+warning without deleting or truncating memory. It measures content bytes rather
+than model tokens and excludes the index itself. Read a decision link's section
+only, rather than loading its entire file.
+
 ## File layout
 
 ```
@@ -139,7 +163,10 @@ docs/project-memory/
 
 See [`examples/`](examples/) for the generated index and entry metadata. Run the
 dependency-free regression suite with `bash tests/run.sh`; it includes a
-500-task lifecycle test that verifies the 30/470 active/archive boundary.
+500-task synthetic lifecycle test with intermediate index rebuilds, malformed
+input and recovery scenarios, and a 500-decision context-budget test. These
+regressions do not replace longitudinal evidence from real projects. GitHub
+Actions runs the suite on macOS and Linux for pushes and pull requests.
 
 ## License
 

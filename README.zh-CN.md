@@ -25,6 +25,8 @@
 git clone https://github.com/aprilvkuo/claude-project-memory.git
 cd claude-project-memory
 ./install.sh
+# 只安装指定 Agent：
+./install.sh --target codex   # claude | codex | hermes | all
 ```
 
 安装器会把同一个 bundle 部署到三个官方用户目录：
@@ -35,8 +37,12 @@ cd claude-project-memory
 | Codex | `~/.agents/skills/project-memory` |
 | Hermes | `~/.hermes/skills/project-memory` |
 
-已有版本会先备份。可用 `CLAUDE_SKILLS_DIR`、`CODEX_SKILLS_DIR`、
+已有版本备份在扫描目录以外的 `<skill根目录的父目录>/skill-backups/project-memory/<agent>/<时间戳>/`。
+例如 Codex 备份位于 `~/.agents/skill-backups/project-memory/codex/`。
+更新时也会迁出旧安装器创建的 `project-memory.backup.*`，完整保留内容。
+可用 `CLAUDE_SKILLS_DIR`、`CODEX_SKILLS_DIR`、
 `HERMES_SKILLS_DIR` 覆盖根目录。`./uninstall.sh` 只移除当前安装，不删除项目记忆或备份。
+用 `./uninstall.sh --target codex` 可只卸载指定 Agent。
 
 Hermes 也可以直接从 GitHub 安装：
 
@@ -110,6 +116,18 @@ summary: 项目记忆保持人类可读并由 Git 跟踪。
 `MEMORY_TASK_LOG_LIMIT=50` 覆盖。当前序号仍同时扫描活跃与归档日志；
 `update` / `handoff` 会先归档再重建索引。
 
+归档前会校验两个日志：标题 `Tn` 必须与唯一的 `seq: n` 一致，记录按序号降序排列，
+活跃与归档中的同序号记录必须具有相同内容。异常输入不会改写两个日志；
+归档先写入的流程被中断后，重新运行可恢复并去重。
+
+元数据只解析文件开头的 frontmatter，或决策标题紧随的连续字段块。
+代码围栏中的示例不参与索引；支持行尾注释及单/双引号标量，这是小型元数据格式，
+不是完整 YAML 解析器。缺少的决策字段先继承文件级字段，再采用默认值。
+
+生成索引会报告行数和默认加载正文的 UTF-8 字节数。`MEMORY_CONTEXT_BUDGET_BYTES`
+默认 32768，超限只发出提示，不删除或截断记忆。此指标不等于 token 数，也不包含索引自身。
+展开决策链接时只读取对应章节，避免整页加载。
+
 ## 文件结构
 
 ```
@@ -127,7 +145,9 @@ docs/project-memory/
 ## 示例
 
 见 [`examples/`](examples/) 中的条目元数据和生成索引。运行 `bash tests/run.sh`
-执行无依赖回归测试，其中包括 500-task 生命周期测试和 30/470 活跃/归档边界检查。
+执行无依赖回归测试，包含中途重建索引的 500-task 合成生命周期、30/470 活跃/归档边界、
+异常输入与恢复场景，以及 500 条决策的上下文预算测试。这些回归不能代替真实项目的长期验证。
+GitHub Actions 会在 push 和 pull request 时分别运行 macOS 与 Linux 测试。
 
 ## 许可证
 

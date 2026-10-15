@@ -1,0 +1,23 @@
+name: Memory regression tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: |
+          for file in install.sh uninstall.sh scripts/*.sh project-memory/*.sh tests/*.sh; do
+            bash -n "$file"
+          done
+      - name: Run regression suite
+        run: bash tests/run.sh
+      - name: Check whitespace
+        run: git diff --check

@@ -98,7 +98,7 @@ summary: 衰减按任务数计算，而不是按日期。
 
 决策正文与权衡。
 ```
-每条 `## D…` 决策独立进入 `MEMORY.md`，不会再共享文件级 recency。
+每条决策独立进入 `MEMORY.md`，不会再共享文件级 recency。ID 使用 `D12`、`D-old`、`D_api` 这类形式，避免将 `## Details` 等普通标题当作决策。
 
 ### 任务流水条目（task-log.md，newest first）
 ```markdown
@@ -120,6 +120,7 @@ Verified: 跑过 memory-index.sh，recency 计算正确。
 1. **只读 `MEMORY.md` 索引**（几行表格，极省 token）。
 2. 加载 `Load` 列为 **`always`** 或 **`recent:auto`** 的页/条目。
 3. `recent:on-demand` 与 `on-demand` 不默认读取；仅当用户问题明显相关时按索引展开。
+   决策链接只读取该标题到下一个二级标题之间的正文，避免为单条决策读取整个文件。
 4. 汇总当前状态，给出下一步。
 
 ### `project-memory update`（有实质进展后）
@@ -145,8 +146,15 @@ Verified: 跑过 memory-index.sh，recency 计算正确。
 - 索引 `MEMORY.md` 由 `memory-index.sh` 生成，**不要手改**；改了也会被下次 rebuild 覆盖。
 - 向后兼容：没有 frontmatter 的旧文件按 `tasks_since = 0` 处理（recency 1.0，安全不降级）。
 - archive task-log 永远按需加载，不能因为其中某条较新而整页进入上下文。
+- 任务标题 `Tn` 必须与条目内唯一的 `seq: n` 一致；活跃与归档各自按序号降序排列。
+  遇到缺失、重复或冲突的记录时先修正来源，不绕过脚本校验覆盖归档。
+- 元数据只出现在文件开头的 frontmatter 或决策标题紧随的连续字段块中；代码围栏内的内容不参与解析。
+  支持行尾注释及单/双引号标量；缺失的决策字段继承文件级字段，再使用默认值。
 
 ## 5. 配置
 - `Half-life (tasks):` 写在 `MEMORY.md` 顶部（默认 10）。改大=记忆更持久，改小=衰减更激进。
 - 临时覆盖：`MEMORY_HALF_LIFE=14 "$SKILL_DIR/memory-index.sh" docs/project-memory`。
 - 活跃任务默认上限 30；临时覆盖：`MEMORY_TASK_LOG_LIMIT=50 "$SKILL_DIR/task-log-retention.sh" docs/project-memory`。
+- `MEMORY.md` 报告索引行数和默认加载正文的 UTF-8 字节数。预算默认 32768 字节，
+  可用 `MEMORY_CONTEXT_BUDGET_BYTES` 覆盖；超限只提示，不截断或删除记忆。
+  该值是正文大小指标，不是 token 计数；索引自身的大小另由行数观察。

@@ -27,6 +27,7 @@ EOF
 for ((seq=1; seq<=500; seq++)); do
   next_log="$(mktemp "$mem_dir/.next-task-log.XXXXXX")"
   awk -v seq="$seq" '
+    /^last_task:/ { print "last_task: " seq; next }
     { print }
     /^# Task Log$/ {
       print ""
@@ -43,6 +44,8 @@ for ((seq=1; seq<=500; seq++)); do
     (( sampled_active <= 30 )) || fail "active log exceeded 30 entries at task $seq"
     sampled_unique="$(grep -h '^seq: ' "$mem_dir/task-log.md" "$mem_dir/archive/task-log-archive.md" 2>/dev/null | awk '{print $2}' | sort -n | uniq | wc -l | tr -d ' ')"
     [[ "$sampled_unique" == "$seq" ]] || fail "sequence loss/duplication at task $seq"
+    "$INDEXER" "$mem_dir" >/dev/null
+    grep -q "^Current task seq: $seq$" "$mem_dir/MEMORY.md" || fail "index sequence drift at task $seq"
   fi
 done
 
