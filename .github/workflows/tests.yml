@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Check shell syntax
         run: |
           for file in install.sh uninstall.sh scripts/*.sh project-memory/*.sh tests/*.sh; do
